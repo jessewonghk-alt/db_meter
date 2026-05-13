@@ -3,11 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS Web App 設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="分貝計">
-    <meta name="theme-color" content="#0f172a">
     
+    <!-- 關鍵：iOS 主畫面圖示 (建議使用 180x180 像素的 PNG) -->
+    <!-- 提示：您可以將剛才生成的圖片上傳後，更換下方的 href 網址 -->
+    <link rel="apple-touch-icon" href="https://placehold.co/180x180/0f172a/0ea5e9?text=dB">
+    <link rel="apple-touch-icon" sizes="152x152" href="https://placehold.co/152x152/0f172a/0ea5e9?text=dB">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://placehold.co/180x180/0f172a/0ea5e9?text=dB">
+
+    <meta name="theme-color" content="#0f172a">
     <title>實時分貝顯示器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -23,35 +31,20 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
-            /* 禁止文字選取，提升 App 感 */
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
-        .db-glow {
-            text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
-        }
-        .progress-ring {
-            transition: stroke-dashoffset 0.1s;
-            transform: rotate(-90deg);
-            transform-origin: 50% 50%;
-        }
-        .meter-container {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        /* 適應 iPhone X 以上的瀏海區域 */
-        .safe-area-inset {
-            padding-bottom: env(safe-area-inset-bottom);
-        }
+        .db-glow { text-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
+        .progress-ring { transition: stroke-dashoffset 0.1s; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .meter-container { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .safe-area-inset { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
 <body>
 
     <div class="flex flex-col items-center justify-center w-full max-w-md px-6 safe-area-inset">
         <div class="meter-container w-full aspect-square rounded-full p-8 flex flex-col items-center justify-center relative shadow-2xl">
-            
             <svg class="absolute inset-0 w-full h-full p-4" viewBox="0 0 100 100">
                 <circle class="text-slate-800" stroke-width="4" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50"/>
                 <circle id="progressCircle" class="progress-ring text-sky-500" stroke-width="4" stroke-dasharray="282.7" stroke-dashoffset="282.7" stroke-linecap="round" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50"/>
@@ -84,10 +77,6 @@
                 </div>
             </div>
         </div>
-        
-        <p class="mt-8 text-slate-500 text-[10px] text-center px-4 opacity-50">
-            請點擊瀏覽器選單並選擇「加入主畫面」以作為 App 使用
-        </p>
     </div>
 
     <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-rose-500 text-white px-6 py-3 rounded-full shadow-xl opacity-0 transition-opacity pointer-events-none z-50 text-sm text-center">
@@ -95,8 +84,7 @@
     </div>
 
     <script>
-        
-        // 自動生成 Manifest 讓行動裝置識別為 App
+        // 自動生成 Manifest (Android 支援)
         const manifest = {
             "name": "實時分貝計",
             "short_name": "分貝計",
@@ -105,25 +93,19 @@
             "background_color": "#0f172a",
             "theme_color": "#0f172a",
             "icons": [{
-                "src": "https://placehold.co/512x512/0ea5e9/ffffff?text=dB",
+                "src": "https://placehold.co/512x512/0f172a/0ea5e9?text=dB",
                 "sizes": "512x512",
                 "type": "image/png"
             }]
         };
-        const stringManifest = JSON.stringify(manifest);
-        const blob = new Blob([stringManifest], {type: 'application/json'});
-        const manifestURL = URL.createObjectURL(blob);
+        const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
         const link = document.createElement('link');
         link.rel = 'manifest';
-        link.href = manifestURL;
+        link.href = URL.createObjectURL(blob);
         document.head.appendChild(link);
 
-        let audioContext;
-        let analyser;
-        let microphone;
-        let isRunning = false;
-        let dbHistory = [];
-        let peakDb = 0;
+        let audioContext, analyser, microphone, isRunning = false;
+        let dbHistory = [], peakDb = 0;
 
         const dbDisplay = document.getElementById('dbValue');
         const avgDbDisplay = document.getElementById('avgDbValue');
@@ -134,52 +116,35 @@
         const toast = document.getElementById('toast');
 
         async function startMeter() {
-            if (!window.isSecureContext) {
-                showToast("錯誤：麥克風需要 HTTPS 環境。");
-                return;
-            }
-
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 microphone = audioContext.createMediaStreamSource(stream);
-                
                 analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.3;
-                
                 microphone.connect(analyser);
                 
                 isRunning = true;
                 toggleBtn.textContent = '停止測量';
                 toggleBtn.classList.replace('bg-sky-500', 'bg-rose-500');
-                toggleBtn.classList.replace('hover:bg-sky-400', 'hover:bg-rose-400');
                 
                 processAudio();
             } catch (err) {
-                showToast("無法存取麥克風。請確認權限已開啟。");
+                showToast("權限被封鎖。若在 Google Sites 內，請嘗試「發佈」後直接訪問網址。");
             }
         }
 
         function stopMeter() {
-            if (audioContext && audioContext.state !== 'closed') {
-                audioContext.close();
-            }
+            if (audioContext) audioContext.close();
             isRunning = false;
             toggleBtn.textContent = '開啟麥克風';
             toggleBtn.classList.replace('bg-rose-500', 'bg-sky-500');
-            toggleBtn.classList.replace('hover:bg-rose-400', 'hover:bg-sky-400');
-            
             dbDisplay.textContent = '0';
-            avgDbDisplay.innerHTML = '--';
-            statusLabel.textContent = '待機中';
             updateCircle(0);
         }
 
         function processAudio() {
             if (!isRunning) return;
-
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             
@@ -191,20 +156,15 @@
                 let average = sum / bufferLength;
                 let db = Math.round(average > 0 ? (20 * Math.log10(average)) + 25 : 0);
                 
-                if (db < 0) db = 0;
-                if (db > 120) db = 120;
-
+                db = Math.max(0, Math.min(120, db));
                 dbDisplay.textContent = db;
+                
                 dbHistory.push(db);
                 if (dbHistory.length > 50) dbHistory.shift();
-                
                 const avg = Math.round(dbHistory.reduce((a, b) => a + b) / dbHistory.length);
                 avgDbDisplay.innerHTML = `${avg} dB (L<sub>eq</sub>)`;
 
-                if (db > peakDb) {
-                    peakDb = db;
-                    peakDbDisplay.textContent = `${peakDb} dB`;
-                }
+                if (db > peakDb) { peakDb = db; peakDbDisplay.textContent = `${peakDb} dB`; }
 
                 updateCircle(db);
                 updateStatus(db);
@@ -214,12 +174,9 @@
         }
 
         function updateCircle(db) {
-            const radius = 45;
-            const circumference = 2 * Math.PI * radius;
-            const percentage = Math.min(db / 100, 1);
-            const offset = circumference - (percentage * circumference);
+            const circumference = 2 * Math.PI * 45;
+            const offset = circumference - (Math.min(db / 100, 1) * circumference);
             progressCircle.style.strokeDashoffset = offset;
-            
             if (db < 50) progressCircle.setAttribute('class', 'progress-ring text-emerald-400');
             else if (db < 80) progressCircle.setAttribute('class', 'progress-ring text-amber-400');
             else progressCircle.setAttribute('class', 'progress-ring text-rose-500');
@@ -227,22 +184,17 @@
 
         function updateStatus(db) {
             if (db < 30) { statusLabel.textContent = "非常安靜"; statusLabel.className = "text-xl font-bold text-emerald-400"; }
-            else if (db < 50) { statusLabel.textContent = "安靜"; statusLabel.className = "text-xl font-bold text-emerald-500"; }
-            else if (db < 70) { statusLabel.textContent = "普通說話"; statusLabel.className = "text-xl font-bold text-sky-400"; }
-            else if (db < 85) { statusLabel.textContent = "吵雜"; statusLabel.className = "text-xl font-bold text-amber-500"; }
-            else { statusLabel.textContent = "極其吵雜"; statusLabel.className = "text-xl font-bold text-rose-500"; }
+            else if (db < 70) { statusLabel.textContent = "普通"; statusLabel.className = "text-xl font-bold text-sky-400"; }
+            else { statusLabel.textContent = "吵雜"; statusLabel.className = "text-xl font-bold text-rose-500"; }
         }
 
         function showToast(msg) {
             toast.textContent = msg;
             toast.style.opacity = '1';
-            setTimeout(() => { toast.style.opacity = '0'; }, 5000);
+            setTimeout(() => toast.style.opacity = '0', 5000);
         }
 
-        toggleBtn.addEventListener('click', () => {
-            if (isRunning) stopMeter();
-            else startMeter();
-        });
+        toggleBtn.addEventListener('click', () => isRunning ? stopMeter() : startMeter());
     </script>
 </body>
 </html>
