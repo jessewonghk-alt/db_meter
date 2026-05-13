@@ -2,10 +2,16 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="分貝計">
+    <meta name="theme-color" content="#0f172a">
+    
     <title>實時分貝顯示器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -17,6 +23,10 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
+            /* 禁止文字選取，提升 App 感 */
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .db-glow {
             text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
@@ -31,26 +41,27 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+        /* 適應 iPhone X 以上的瀏海區域 */
+        .safe-area-inset {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
     </style>
 </head>
 <body>
 
-    <div class="flex flex-col items-center justify-center w-full max-w-md px-6">
+    <div class="flex flex-col items-center justify-center w-full max-w-md px-6 safe-area-inset">
         <div class="meter-container w-full aspect-square rounded-full p-8 flex flex-col items-center justify-center relative shadow-2xl">
             
-            <!-- 背景環形 -->
             <svg class="absolute inset-0 w-full h-full p-4" viewBox="0 0 100 100">
                 <circle class="text-slate-800" stroke-width="4" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50"/>
                 <circle id="progressCircle" class="progress-ring text-sky-500" stroke-width="4" stroke-dasharray="282.7" stroke-dashoffset="282.7" stroke-linecap="round" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50"/>
             </svg>
 
-            <!-- 分貝數字 -->
             <div class="z-10 text-center">
                 <span id="dbValue" class="text-8xl font-black db-glow leading-none">0</span>
                 <span class="block text-xl font-semibold text-sky-400 mt-2 tracking-widest">dB</span>
             </div>
 
-            <!-- 平均值 -->
             <div class="absolute bottom-16 z-10 text-center">
                 <p class="text-slate-400 text-sm uppercase tracking-tighter">平均分貝值</p>
                 <p id="avgDbValue" class="text-lg font-medium text-slate-200 mt-1">--</p>
@@ -74,18 +85,39 @@
             </div>
         </div>
         
-        <p class="mt-8 text-slate-500 text-xs text-center px-4">
-            * 本工具基於 Web Audio API 測量，精準度取決於硬體麥克風性能。<br>
-            若在 Google Sites 無法使用，請確保已發佈網站並使用 HTTPS 瀏覽。
+        <p class="mt-8 text-slate-500 text-[10px] text-center px-4 opacity-50">
+            請點擊瀏覽器選單並選擇「加入主畫面」以作為 App 使用
         </p>
     </div>
 
-    <!-- 訊息提示框 -->
     <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-rose-500 text-white px-6 py-3 rounded-full shadow-xl opacity-0 transition-opacity pointer-events-none z-50 text-sm text-center">
         請允許麥克風權限
     </div>
 
     <script>
+        
+        // 自動生成 Manifest 讓行動裝置識別為 App
+        const manifest = {
+            "name": "實時分貝計",
+            "short_name": "分貝計",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#0f172a",
+            "theme_color": "#0f172a",
+            "icons": [{
+                "src": "https://placehold.co/512x512/0ea5e9/ffffff?text=dB",
+                "sizes": "512x512",
+                "type": "image/png"
+            }]
+        };
+        const stringManifest = JSON.stringify(manifest);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestURL;
+        document.head.appendChild(link);
+
         let audioContext;
         let analyser;
         let microphone;
@@ -102,9 +134,8 @@
         const toast = document.getElementById('toast');
 
         async function startMeter() {
-            // 檢查是否處於安全上下文 (HTTPS)
             if (!window.isSecureContext) {
-                showToast("錯誤：麥克風需要 HTTPS 安全連線環境。");
+                showToast("錯誤：麥克風需要 HTTPS 環境。");
                 return;
             }
 
@@ -127,14 +158,7 @@
                 
                 processAudio();
             } catch (err) {
-                console.error('Microphone access denied:', err);
-                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                    showToast("權限遭拒：請在瀏覽器設定中允許此網頁使用麥克風。");
-                } else if (err.name === 'NotFoundError') {
-                    showToast("找不到麥克風設備，請確認已連接硬體。");
-                } else {
-                    showToast("無法存取麥克風。若嵌入於 Google Sites，請嘗試發佈後再測試。");
-                }
+                showToast("無法存取麥克風。請確認權限已開啟。");
             }
         }
 
@@ -148,9 +172,8 @@
             toggleBtn.classList.replace('hover:bg-rose-400', 'hover:bg-sky-400');
             
             dbDisplay.textContent = '0';
-            avgDbDisplay.textContent = '--';
+            avgDbDisplay.innerHTML = '--';
             statusLabel.textContent = '待機中';
-            statusLabel.className = 'text-xl font-bold text-emerald-400';
             updateCircle(0);
         }
 
@@ -162,23 +185,16 @@
             
             const update = () => {
                 if (!isRunning) return;
-                
                 analyser.getByteFrequencyData(dataArray);
-                
                 let sum = 0;
-                for (let i = 0; i < bufferLength; i++) {
-                    sum += dataArray[i];
-                }
+                for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
                 let average = sum / bufferLength;
-                
-                // 針對網頁麥克風優化的簡易校準公式
                 let db = Math.round(average > 0 ? (20 * Math.log10(average)) + 25 : 0);
                 
                 if (db < 0) db = 0;
                 if (db > 120) db = 120;
 
                 dbDisplay.textContent = db;
-                
                 dbHistory.push(db);
                 if (dbHistory.length > 50) dbHistory.shift();
                 
@@ -192,10 +208,8 @@
 
                 updateCircle(db);
                 updateStatus(db);
-
                 requestAnimationFrame(update);
             };
-
             update();
         }
 
@@ -206,32 +220,17 @@
             const offset = circumference - (percentage * circumference);
             progressCircle.style.strokeDashoffset = offset;
             
-            if (db < 50) {
-                progressCircle.setAttribute('class', 'progress-ring text-emerald-400 transition-colors');
-            } else if (db < 80) {
-                progressCircle.setAttribute('class', 'progress-ring text-amber-400 transition-colors');
-            } else {
-                progressCircle.setAttribute('class', 'progress-ring text-rose-500 transition-colors');
-            }
+            if (db < 50) progressCircle.setAttribute('class', 'progress-ring text-emerald-400');
+            else if (db < 80) progressCircle.setAttribute('class', 'progress-ring text-amber-400');
+            else progressCircle.setAttribute('class', 'progress-ring text-rose-500');
         }
 
         function updateStatus(db) {
-            if (db < 30) {
-                statusLabel.textContent = "非常安靜";
-                statusLabel.className = "text-xl font-bold text-emerald-400";
-            } else if (db < 50) {
-                statusLabel.textContent = "安靜";
-                statusLabel.className = "text-xl font-bold text-emerald-500";
-            } else if (db < 70) {
-                statusLabel.textContent = "普通說話";
-                statusLabel.className = "text-xl font-bold text-sky-400";
-            } else if (db < 85) {
-                statusLabel.textContent = "吵雜";
-                statusLabel.className = "text-xl font-bold text-amber-500";
-            } else {
-                statusLabel.textContent = "極其吵雜";
-                statusLabel.className = "text-xl font-bold text-rose-500";
-            }
+            if (db < 30) { statusLabel.textContent = "非常安靜"; statusLabel.className = "text-xl font-bold text-emerald-400"; }
+            else if (db < 50) { statusLabel.textContent = "安靜"; statusLabel.className = "text-xl font-bold text-emerald-500"; }
+            else if (db < 70) { statusLabel.textContent = "普通說話"; statusLabel.className = "text-xl font-bold text-sky-400"; }
+            else if (db < 85) { statusLabel.textContent = "吵雜"; statusLabel.className = "text-xl font-bold text-amber-500"; }
+            else { statusLabel.textContent = "極其吵雜"; statusLabel.className = "text-xl font-bold text-rose-500"; }
         }
 
         function showToast(msg) {
@@ -241,13 +240,9 @@
         }
 
         toggleBtn.addEventListener('click', () => {
-            if (isRunning) {
-                stopMeter();
-            } else {
-                startMeter();
-            }
+            if (isRunning) stopMeter();
+            else startMeter();
         });
-
     </script>
 </body>
 </html>
